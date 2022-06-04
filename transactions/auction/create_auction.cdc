@@ -2,9 +2,9 @@
 // Used to create an auction for an NFT
 
 import AuctionHouse     from 0x045a1763c93006ca
-import NonFungibleToken from 0xf8d6e0586b0a20c7
-import DAAM             from 0xfd43f9148d4b725d
-import FUSD             from 0x192440c99cb17282
+import NonFungibleToken from 0x631e88ae7f1d7c20
+import DAAM_V11             from 0xa4ad5ea5c0bd2fba
+import FUSD             from 0xe223d8a629e49c68
 
 transaction(tokenID: UInt64, start: UFix64, length: UFix64, isExtended: Bool, extendedTime: UFix64,
   /*requiredCurrency: Type,*/ incrementByPrice: Bool, incrementAmount: UFix64, startingBid: UFix64,
@@ -12,13 +12,12 @@ transaction(tokenID: UInt64, start: UFix64, length: UFix64, isExtended: Bool, ex
 {
 
   let auctionHouse : &AuctionHouse.AuctionWallet
-  let nftCollection: &DAAM.Collection
+  let nftCollection: &DAAM_V11.Collection
 
   let tokenID     : UInt64
   let start       : UFix64
   let length      : UFix64
   let isExtended  : Bool
-  let requiredCurrency: Type
   let extendedTime: UFix64
   let incrementByPrice: Bool
   let incrementAmount : UFix64
@@ -28,14 +27,13 @@ transaction(tokenID: UInt64, start: UFix64, length: UFix64, isExtended: Bool, ex
 
   prepare(auctioneer: AuthAccount) {
     self.auctionHouse  = auctioneer.borrow<&AuctionHouse.AuctionWallet>(from: AuctionHouse.auctionStoragePath)!
-    self.nftCollection = auctioneer.borrow<&DAAM.Collection>(from: DAAM.collectionStoragePath)!
+    self.nftCollection = auctioneer.borrow<&DAAM_V11.Collection>(from: DAAM_V11.collectionStoragePath)!
 
     self.tokenID          = tokenID
     self.start            = start
     self.length           = length
     self.isExtended       = isExtended
     self.extendedTime     = extendedTime
-    self.requiredCurrency = Type<FUSD.Vault>() //requiredCurrency
     self.incrementByPrice = incrementByPrice
     self.incrementAmount  = incrementAmount
     self.startingBid      = startingBid
@@ -44,10 +42,11 @@ transaction(tokenID: UInt64, start: UFix64, length: UFix64, isExtended: Bool, ex
   }
 
   execute {
-      let nft <- self.nftCollection.withdraw(withdrawID: self.tokenID) as! @DAAM.NFT
+      let nft <- self.nftCollection.withdraw(withdrawID: self.tokenID) as! @DAAM_V11.NFT
+      let vault <- FUSD.createEmptyVault()
 
       let aid = self.auctionHouse.createAuction(nft: <-nft, start: self.start, length: self.length, isExtended: self.isExtended,
-        extendedTime: self.extendedTime, requiredCurrency: self.requiredCurrency, incrementByPrice: self.incrementByPrice,
+        extendedTime: self.extendedTime, vault: <-vault, incrementByPrice: self.incrementByPrice,
         incrementAmount: self.incrementAmount, startingBid: self.startingBid, reserve: self.reserve, buyNow: self.buyNow)
 
       log("New Auction has been created. AID: ".concat(aid.toString() ))

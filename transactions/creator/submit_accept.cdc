@@ -1,5 +1,5 @@
-// submit_nft.cdc
-// Creator uses to submit Metadata
+// submit_accept.cdc
+// Creator uses to submit Metadata & Approve Rpyalty
 
 import Categories    from 0xa4ad5ea5c0bd2fba
 import MetadataViews from 0x1784abd15a9f29a8
@@ -61,6 +61,8 @@ transaction(name: String, max: UInt64?, categories: [String], inCollection: [UIn
     execute {
         let mid = self.metadataGen.addMetadata(name: self.name, max: self.max, categories: self.categories, inCollection: self.inCollection,
         description: self.description, thumbnail: self.thumbnail, file: self.file)
+
+        self.requestGen.acceptDefault(mid: mid, metadataGen: self.metadataGen, percentage: self.percentage)
 
         log("Metadata Submitted: ".concat(mid.toString()))
     }
