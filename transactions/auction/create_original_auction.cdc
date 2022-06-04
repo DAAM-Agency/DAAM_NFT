@@ -2,15 +2,15 @@
 // Used to create an auction for a first-time sale.
 
 import AuctionHouse from 0x045a1763c93006ca
-import DAAM         from 0xfd43f9148d4b725d
-import FUSD         from 0x192440c99cb17282
+import DAAM_V11         from 0xa4ad5ea5c0bd2fba
+import FUSD         from 0xe223d8a629e49c68
 
 transaction(mid: UInt64, start: UFix64, length: UFix64, isExtended: Bool, extendedTime: UFix64, 
   /*requiredCurrency: Type,*/ incrementByPrice: Bool, incrementAmount: UFix64, startingBid: UFix64?,
   reserve: UFix64, buyNow: UFix64, reprintSeries: Bool)
 {
   let auctionHouse : &AuctionHouse.AuctionWallet
-  let metadataCap  : Capability<&DAAM.MetadataGenerator{DAAM.MetadataGeneratorMint}>
+  let metadataCap  : Capability<&DAAM_V11.MetadataGenerator{DAAM_V11.MetadataGeneratorMint}>
 
   let mid         : UInt64
   let start       : UFix64
@@ -27,7 +27,7 @@ transaction(mid: UInt64, start: UFix64, length: UFix64, isExtended: Bool, extend
 
   prepare(auctioneer: AuthAccount) {
       self.auctionHouse = auctioneer.borrow<&AuctionHouse.AuctionWallet>(from: AuctionHouse.auctionStoragePath)!      
-      self.metadataCap  = auctioneer.getCapability<&DAAM.MetadataGenerator{DAAM.MetadataGeneratorMint}>(DAAM.metadataPublicPath)!
+      self.metadataCap  = auctioneer.getCapability<&DAAM_V11.MetadataGenerator{DAAM_V11.MetadataGeneratorMint}>(DAAM_V11.metadataPublicPath)!
 
       self.mid              = mid
       self.start            = start
@@ -44,10 +44,10 @@ transaction(mid: UInt64, start: UFix64, length: UFix64, isExtended: Bool, extend
   }
   
   execute {
-      log(self.requiredCurrency)
+      let vault <- FUSD.createEmptyVault()
       let aid = self.auctionHouse.createOriginalAuction(
         metadataGenerator: self.metadataCap!, mid: self.mid, start: self.start, length: self.length,
-        isExtended: self.isExtended, extendedTime: self.extendedTime, requiredCurrency: self.requiredCurrency,
+        isExtended: self.isExtended, extendedTime: self.extendedTime, vault: <-vault,
         incrementByPrice: self.incrementByPrice,incrementAmount: self.incrementAmount, startingBid: self.startingBid,
         reserve: self.reserve, buyNow: self.buyNow, reprintSeries: self.reprintSeries
         )
