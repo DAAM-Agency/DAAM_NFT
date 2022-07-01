@@ -1,4 +1,4 @@
-// Init_Categories.cdc
+// init_FUSD.cdc
 
 transaction(name: String, code: String) {
     let name  : String
@@ -10,8 +10,7 @@ transaction(name: String, code: String) {
         self.code   = code
         self.signer = signer
     }
-
     execute {
-        self.signer.contracts.add(name: self.name, code: self.code.decodeHex(), signer: self.signer)
+        self.signer.contracts.add(name: self.name, code: self.code.decodeHex(), self.signer)
     }
 }
