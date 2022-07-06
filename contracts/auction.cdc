@@ -7,15 +7,15 @@ import MetadataViews    from 0xf8d6e0586b0a20c7
 import DAAM             from 0xfd43f9148d4b725d
 
 pub contract AuctionHouse {
-    // Events
+    // Event
     pub event AuctionCreated(auctionID: UInt64, start: UFix64)   // Auction has been created. 
     pub event AuctionClosed(auctionID: UInt64)    // Auction has been finalized and has been removed.
     pub event AuctionCancelled(auctionID: UInt64) // Auction has been canceled
-    pub event ItemReturned(auctionID: UInt64)     // Auction has ended and the Reserve price was not met.
-    pub event BidMade(auctionID: UInt64, bidder: Address ) // Bid has been made on an Item
+    pub event ItemReturned(auctionID: UInt64, seller: Address, history: AuctionHistory)     // Auction has ended and the Reserve price was not met.
+    pub event BidMade(auctionID: UInt64, bidder: Address) // Bid has been made on an Item
     pub event BidWithdrawn(auctionID: UInt64, bidder: Address)                // Bidder has withdrawn their bid
-    pub event ItemWon(auctionID: UInt64, winner: Address)  // Item has been Won in an auction
-    pub event BuyItNow(auctionID: UInt64, winner: Address, amount: UFix64) // Buy It Now has been completed
+    pub event ItemWon(auctionID: UInt64, winner: Address, tokenID: UInt64, amount: UFix64, history: AuctionHistory)  // Item has been Won in an auction
+    pub event BuyItNow(auctionID: UInt64, winner: Address, amount: UFix64, history: AuctionHistory) // Buy It Now has been completed
     pub event FundsReturned(auctionID: UInt64)   // Funds have been returned accordingly
 
     // Path for Auction Wallet
@@ -28,7 +28,32 @@ pub contract AuctionHouse {
     access(contract) var auctionCounter : UInt64               // Incremental counter used for AID (Auction ID)
     access(contract) var currentAuctions: {Address : [UInt64]} // {Auctioneer Address : [list of Auction IDs (AIDs)] }  // List of all auctions
     access(contract) var fee            : {UInt64 : UFix64}    // { MID : Fee precentage, 1.025 = 0.25% }
-/**********************`**************************************************/
+/************************************************************************/
+pub struct AuctionHistoryEntry {
+    pub let action: String // Action: (Bid, BuyitNow)
+    pub let height: UInt64
+    pub let amount: UFix64 
+    
+    init(action: String, height: UInt64, amount: UFix64) {
+        self.action = action
+        self.height = height
+        self.amount = amount
+    }
+}
+/************************************************************************/
+pub struct AuctionHistory {
+    pub let entry: [AuctionHistoryEntry]
+    pub var result: Bool? // true = BuyItNow, false = Won  ay Auction, ? = returned to Seller
+
+    init() {
+        self.entry = []
+        self.result = nil
+    }
+
+    access(contract) fun addEntry(_ entry: AuctionHistoryEntry) {}
+    access(contract) fun finalEmtry(_ status: Bool?) {}
+}
+/************************************************************************/
 pub struct AuctionHolder {
         pub let status        : Bool? // nil = auction not started or no bid, true = started (with bid), false = auction ended
         pub let auctionID     : UInt64       // Auction ID number. Note: Series auctions keep the same number. 
@@ -47,13 +72,14 @@ pub struct AuctionHolder {
         pub let buyNow        : UFix64   // buy now price (original price + AuctionHouse.fee)
         pub let reprintSeries : UInt64?  // Active Series Minter (if series)
         pub let auctionLog    : {Address: UFix64}    // {Bidders, Amount} // Log of the Auction
+        pub let history       : AuctionHistory
         pub let requiredCurrency: Type
 
         init(
             _ status:Bool?, _ auctionID:UInt64, _ creator: DAAM.CreatorInfo, _ mid: UInt64, _ start: UFix64, _ length: UFix64,
             _ isExtended: Bool, _ extendedTime: UFix64, _ leader: Address?, _ minBid: UFix64?, _ startingBid: UFix64?,
             _ reserve: UFix64, _ fee: UFix64, _ price: UFix64, _ buyNow: UFix64, _ reprintSeries: UInt64?,
-            _ auctionLog: {Address: UFix64}, _ requiredCurrency: Type
+            _ auctionLog: {Address: UFix64}, _ history: AuctionHistory, _ requiredCurrency: Type
             )
             {
                 self.status        = status// nil = auction not started or no bid, true = started (with bid), false = auction ended
@@ -73,6 +99,7 @@ pub struct AuctionHolder {
                 self.buyNow        = buyNow   // buy now price (original price + AuctionHouse.fee)
                 self.reprintSeries = reprintSeries     // Active Series Minter (if series)
                 self.auctionLog    = auctionLog    // {Bidders, Amount} // Log of the Auction
+                self.history       = history
                 self.requiredCurrency = requiredCurrency
             }
 }
@@ -247,6 +274,7 @@ pub struct AuctionHolder {
         pub let buyNow        : UFix64   // buy now price original price
         pub var reprintSeries : UInt64?  // Number of reprints, nil = max prints.
         pub var auctionLog    : {Address: UFix64}    // {Bidders, Amount} // Log of the Auction
+        pub var history       : AuctionHistory
         access(contract) var auctionMetadata : @DAAM.Metadata? // Store NFT for auction
         access(contract) var auctionNFT : @DAAM.NFT? // Store NFT for auction
         priv var auctionVault : @FungibleToken.Vault // Vault, All funds are stored.
@@ -320,6 +348,7 @@ pub struct AuctionHolder {
             self.buyNow = self.price
 
             self.auctionLog = {} // Maintain record of Crypto // {Address : Crypto}
+            self.history = AuctionHistory()
             self.auctionVault <- vault  // ALL Crypto is stored
             self.requiredCurrency = self.auctionVault.getType()
             self.auctionNFT <- nft // NFT Storage durning auction
@@ -436,7 +465,7 @@ pub struct AuctionHolder {
             let info = AuctionHolder(
                 self.status, self.auctionID, self.creatorInfo, self.mid, self.start, self.length, self.isExtended,
                 self.extendedTime, self.leader, self.minBid, self.startingBid, self.reserve, self.fee,
-                self.price, self.buyNow, self.reprintSeries, self.auctionLog, self.requiredCurrency
+                self.price, self.buyNow, self.reprintSeries, self.auctionLog, self.history, self.requiredCurrency
             )
             return info
         }
@@ -477,10 +506,11 @@ pub struct AuctionHolder {
                 self.royalty()      // Pay royalty
 
                 let nft <- self.auctionNFT <- nil // remove nft
+                let id = nft?.id!
                 let leader = self.leader!
                 self.finalise(receiver: self.leader!, nft: <-nft!, pass: pass)
                 log("Item: Won")
-                emit ItemWon(auctionID: self.auctionID, winner: leader) // Auction Ended, but Item not delivered yet.
+                emit ItemWon(auctionID: self.auctionID, winner: leader, tokenID: id, amount: self.auctionLog[self.leader!]!, history: self.history) // Auction Ended, but Item not delivered yet.
             } else {   
                 let receiver = self.owner!.address   // set receiver from leader to auctioneer 
                 if self.auctionMetadata != nil { // return Metadata to Creator
@@ -488,14 +518,14 @@ pub struct AuctionHolder {
                     let ref = getAccount(receiver!).getCapability<&DAAM.MetadataGenerator{DAAM.MetadataGeneratorPublic}>(DAAM.metadataPublicPath).borrow()!
                     ref.returnMetadata(metadata: <- metadata!)
                     self.returnFunds()              // return funds to all bidders
-                    log("Item: Returned")
-                    emit ItemReturned(auctionID: self.auctionID)
+                    log("Item: Returned")                   
+                    emit ItemReturned(auctionID: self.auctionID, seller: receiver!, history: self.history )
                 } else {      // return NFT to Seller, reerve not meet
                     let nft <- self.auctionNFT <- nil
                     self.returnFunds()              // return funds to all bidders
                     self.finalise(receiver: receiver, nft: <-nft!, pass: pass)
                     log("Item: Returned")
-                    emit ItemReturned(auctionID: self.auctionID) 
+                    emit ItemReturned(auctionID: self.auctionID, seller: receiver!, history: self.history )
                 }                            
             }
         }
@@ -574,8 +604,7 @@ pub struct AuctionHolder {
             self.auctionVault.deposit(from: <- amount)  // depsoit into Auction Vault
 
             log("Buy It Now")
-            emit BuyItNow(auctionID: self.auctionID, winner: self.leader!, amount: self.buyNow)                         // pay royalities
-
+            emit BuyItNow(auctionID: self.auctionID, winner: self.leader!, amount: self.buyNow, history: self.history )
             log(self.auctionLog)
             self.winnerCollect() // Will receive NFT if reserve price is met
         }    
